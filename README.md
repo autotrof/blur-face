@@ -1,6 +1,6 @@
-# Rapi
+# Autotrof Blur Face Offline
 
-A small Indonesian photo privacy tool. Add several photos, review automatically detected faces, add or resize oval and box areas, then download one photo or all of them. Images stay in the browser; the Rust WebAssembly modules run locally.
+An offline-capable photo privacy editor. Add several photos, review the automatically detected faces, add or rotate manual areas, crop each photo, and download one image or the full batch. Images stay in the browser; the Rust WebAssembly modules run locally.
 
 Automatic detection uses the bundled SeetaFace frontal detector. It can miss side-facing or very small faces, so each photo also supports manual areas.
 
@@ -16,4 +16,4 @@ python3 -m http.server 8000
 
 Open `http://localhost:8000`. The detector model is fetched from a pinned upstream commit and SHA-256 checked before it is embedded in the detector module. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
-The GitHub Actions workflow builds both WASM modules and deploys only the static site and generated modules to GitHub Pages.
+The service worker caches the app shell, icons, and both WASM modules for offline use. Its relative URLs support GitHub Pages project subpaths. The Pages workflow builds both modules and includes all installable PWA files in the deployment artifact.

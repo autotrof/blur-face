@@ -35,8 +35,14 @@ jobs:
       - name: Assemble site files
         run: |
           mkdir -p dist/public/wasm
-          cp index.html style.css app.js .nojekyll THIRD_PARTY_NOTICES.md dist/
+          mkdir -p dist/icons
+          cp index.html style.css app.js service-worker.js manifest.webmanifest .nojekyll THIRD_PARTY_NOTICES.md dist/
+          cp icons/icon-192.png icons/icon-512.png dist/icons/
           cp -R public/wasm/face-detect public/wasm/blur dist/public/wasm/
+          test -s dist/manifest.webmanifest
+          test -s dist/service-worker.js
+          test -s dist/icons/icon-192.png
+          test -s dist/icons/icon-512.png
           test -s dist/public/wasm/face-detect/wajah_detect.js
           test -s dist/public/wasm/face-detect/wajah_detect_bg.wasm
           test -s dist/public/wasm/blur/wajah_blur.js

@@ -2,7 +2,8 @@
 <html lang="id">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#f6f9fc"><title>Rapi — Samarkan foto</title>
+  <meta name="theme-color" content="#f6f9fc"><meta name="description" content="Blur wajah secara lokal di browser Anda."><title>Autotrof Blur Face Offline</title>
+  <link rel="manifest" href="./manifest.webmanifest"><link rel="icon" href="./icons/icon-192.png" type="image/png"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="default">
   <link rel="stylesheet" href="./style.css">
 </head>
 <body>
@@ -10,7 +11,7 @@
     <aside class="sidebar" aria-label="Daftar foto">
       <label class="upload-card" for="file-input">
         <span class="upload-symbol" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 16V4m0 0L7 9m5-5 5 5M5 14v5h14v-5"/></svg></span>
-        <span><strong>Tambah foto</strong><small>JPG, PNG, atau WebP</small></span>
+        <span><strong>Tambah foto</strong><small>Pilih atau jatuhkan beberapa foto</small></span>
       </label>
       <input id="file-input" type="file" accept="image/*" multiple hidden>
       <div id="image-list" class="image-list"></div>
@@ -19,31 +20,33 @@
     <section class="workspace" aria-label="Editor foto">
       <div id="empty-state" class="empty-state">
         <div class="empty-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg></div>
-        <h1>Samarkan wajah di foto</h1>
-        <p>Foto diproses langsung di perangkat Anda.</p>
+        <h1>Blur Face</h1>
         <label for="file-input" class="button button-primary">Pilih foto</label>
       </div>
+      <div id="drop-indicator" class="drop-indicator" aria-hidden="true"><div><span class="drop-symbol">＋</span><strong>Lepaskan foto di sini</strong><small>Anda bisa menambahkan beberapa foto sekaligus</small></div></div>
+      <div id="batch-loading" class="batch-loading" role="status" aria-live="polite" hidden><span class="spinner"></span><span id="batch-loading-text">Memuat foto…</span></div>
       <div id="editor" class="editor" hidden>
         <div class="editor-head">
           <div class="file-title"><h1 id="active-name">—</h1><span id="active-size"></span></div>
           <button id="remove-image" class="icon-button" title="Hapus foto" aria-label="Hapus foto"><svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6m4-6v6M5 7l1 14h12l1-14M9 7V4h6v3"/></svg></button>
         </div>
-        <div class="canvas-wrap" id="canvas-wrap"><canvas id="photo-canvas"></canvas><canvas id="overlay-canvas" aria-hidden="true"></canvas><div id="scan-message" class="scan-message" hidden><span class="spinner"></span>Mencari wajah…</div></div>
+        <div class="canvas-wrap" id="canvas-wrap"><canvas id="photo-canvas"></canvas><canvas id="overlay-canvas" aria-hidden="true"></canvas></div>
         <div class="canvas-foot"><span id="face-note"></span><span id="dimension-note"></span></div>
         <div class="controls">
-          <div class="control-row">
+          <div class="control-row controls-main">
             <div class="setting"><span class="control-label">Bentuk area</span><div class="segmented" role="group" aria-label="Bentuk area"><button type="button" class="shape-choice" data-shape="oval" aria-pressed="true"><span class="shape-icon oval-icon"></span>Oval</button><button type="button" class="shape-choice" data-shape="rect" aria-pressed="false"><span class="shape-icon rect-icon"></span>Persegi</button></div></div>
             <div class="setting strength-setting"><label class="control-label" for="strength">Intensitas <b id="strength-label">24</b></label><input id="strength" type="range" min="8" max="56" value="24"></div>
             <div class="setting"><label class="control-label" for="blur-style">Gaya</label><select id="blur-style"><option value="kotak">Piksel</option><option value="halus">Halus</option></select></div>
+            <div class="setting add-setting"><span class="control-label">Area</span><button class="add-area" id="add-area" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Tambah area</button></div>
           </div>
-          <div class="control-row second-row"><div class="setting"><span class="control-label">Area manual</span><button class="add-area" id="add-area" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Tambah area</button></div><span class="drag-hint">Seret untuk menambah atau mengubah ukuran area.</span></div>
         </div>
-        <div class="area-list-wrap"><div class="area-title"><span>Area</span><button id="clear-areas" class="text-button">Hapus semua</button></div><div id="area-list" class="area-list"></div></div>
+        <section class="crop-panel" aria-label="Potong foto"><div class="crop-heading"><strong>Potong foto</strong><span>Geser foto untuk mengatur bingkai</span></div><div class="crop-tools"><select id="crop-ratio" aria-label="Rasio potong"><option value="original">Asli</option><option value="1:1">1:1</option><option value="4:3">4:3</option><option value="3:2">3:2</option><option value="16:9">16:9</option></select><label class="zoom-control">Zoom <input id="crop-zoom" type="range" min="1" max="3" step="0.01" value="1"></label><button id="crop-position" class="text-button" type="button" aria-pressed="false">Atur bingkai</button><button id="apply-crop-all" class="text-button" type="button">Terapkan ke semua foto</button></div></section>
         <div class="bottom-actions"><button id="download-one" class="button button-primary"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0 5-5m-5 5-5-5M5 17v4h14v-4"/></svg>Unduh foto</button><span>PNG · ukuran asli</span></div>
       </div>
     </section>
   </main>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
   <script type="module" src="./app.js"></script>
+  <script>if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('./service-worker.js',{scope:'./'}).catch(console.error));}</script>
 </body>
 </html>
