@@ -1,0 +1,59 @@
+name: Build and deploy to GitHub Pages
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: jetli/wasm-pack-action@v0.4.0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Fetch and verify licensed detector model
+        run: ./scripts/fetch-model.sh
+      - name: Build face detector WASM
+        working-directory: crates/face-detect
+        run: wasm-pack build --release --target web --out-dir ../../public/wasm/face-detect
+      - name: Build blur WASM
+        working-directory: crates/blur
+        run: wasm-pack build --release --target web --out-dir ../../public/wasm/blur
+      - name: Verify generated WASM entrypoints
+        run: test -s public/wasm/face-detect/wajah_detect.js && test -s public/wasm/face-detect/wajah_detect_bg.wasm && test -s public/wasm/blur/wajah_blur.js && test -s public/wasm/blur/wajah_blur_bg.wasm
+      - name: Assemble site files
+        run: |
+          mkdir -p dist/public/wasm
+          cp index.html style.css app.js .nojekyll dist/
+          cp -R public/wasm/face-detect public/wasm/blur dist/public/wasm/
+          test -s dist/public/wasm/face-detect/wajah_detect.js
+          test -s dist/public/wasm/face-detect/wajah_detect_bg.wasm
+          test -s dist/public/wasm/blur/wajah_blur.js
+          test -s dist/public/wasm/blur/wajah_blur_bg.wasm
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

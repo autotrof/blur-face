@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f5f4ef"><title>Rapi — Samarkan bagian foto</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="./" aria-label="Rapi, beranda"><span class="brand-mark">r.</span><span>rapi</span></a>
+    <div class="privacy"><span class="lock">▣</span> Privat · tanpa unggah</div>
+    <button id="download-all" class="button button-dark" disabled>Unduh semua <span aria-hidden="true">↗</span></button>
+  </header>
+  <main class="layout">
+    <aside class="sidebar">
+      <div class="side-heading"><div><span class="eyebrow">RUANG KERJA</span><h1>Samarkan foto</h1></div><span class="step-dot">01</span></div>
+      <p class="intro">Wajah ditemukan otomatis. Area dapat diedit.</p>
+      <label class="upload-card" for="file-input"><span class="upload-icon">＋</span><span><strong>Tambah foto</strong><small>JPG, PNG, atau WebP</small></span><span class="upload-arrow">↗</span></label>
+      <input id="file-input" type="file" accept="image/*" multiple hidden>
+      <div class="section-label"><span>FOTO ANDA</span><span id="image-count">0</span></div>
+      <div id="image-list" class="image-list"></div>
+    </aside>
+    <section class="workspace">
+      <div id="empty-state" class="empty-state">
+        <div class="empty-art"><span class="art-sun"></span><span class="art-card"></span><span class="art-spark">✳</span></div>
+        <h2>Samarkan foto dengan mudah.</h2>
+        <p>Tambah foto untuk mulai menyamarkan wajah.</p>
+        <label for="file-input" class="button button-dark">Pilih foto <span>↗</span></label>
+      </div>
+      <div id="editor" class="editor" hidden>
+        <div class="editor-head"><div><span class="eyebrow">PRATINJAU FOTO</span><h2 id="active-name">—</h2></div><button id="remove-image" class="icon-button" title="Hapus foto" aria-label="Hapus foto">×</button></div>
+        <div class="canvas-wrap" id="canvas-wrap"><canvas id="photo-canvas"></canvas><div id="scan-message" class="scan-message" hidden><span class="spinner"></span> Mencari wajah…</div></div>
+        <div class="canvas-foot"><span id="face-note">Pilih kotak wajah untuk mengaktifkan atau mematikan samaran.</span><span id="dimension-note"></span></div>
+        <div class="edit-tools">
+          <div class="tool-group"><span class="tool-label">TAMBAH AREA</span><button class="tool-button" id="add-oval"><span class="shape-icon oval-icon"></span>Oval</button><button class="tool-button" id="add-rect"><span class="shape-icon rect-icon"></span>Kotak</button></div>
+          <div class="tool-group settings-group"><label class="tool-label" for="strength">KEKUATAN <b id="strength-label">24</b></label><input id="strength" type="range" min="8" max="56" value="24"><label class="sr-only" for="blur-style">Gaya samaran</label><select id="blur-style"><option value="kotak">Piksel</option><option value="halus">Halus</option></select></div>
+        </div>
+        <div class="area-list-wrap"><div class="area-title"><span>AREA SAMARAN</span><button id="clear-areas" class="text-button">Hapus semua</button></div><div id="area-list" class="area-list"></div></div>
+        <div class="bottom-actions"><button id="download-one" class="button button-dark">Unduh foto ini <span>↗</span></button><span>PNG · kualitas penuh</span></div>
+      </div>
+    </section>
+  </main>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

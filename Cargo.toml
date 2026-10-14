@@ -1,0 +1,3 @@
+[workspace]
+members = ["crates/face-detect", "crates/blur"]
+resolver = "2"
