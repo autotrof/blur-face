@@ -164,7 +164,7 @@ function handleHit(point, region, kind) {
 }
 ui.canvas.addEventListener('pointerdown', (event) => {
   const item = selected(); if (!item) return; const point = canvasPoint(event); ui.canvas.setPointerCapture(event.pointerId);
-  if (cropMode) { drag = { mode: 'crop', start: point, orig: { ...item.crop } }; }
+  if (cropMode) { const box = ui.canvas.getBoundingClientRect(); drag = { mode: 'crop', start: { x: event.clientX, y: event.clientY }, scaleX: item.crop.width / box.width, scaleY: item.crop.height / box.height, orig: { ...item.crop } }; }
   else {
     const handleRegion = [...item.regions].reverse().find((candidate) => resizeCorner(point, candidate) || handleHit(point, candidate, 'rotate') || handleHit(point, candidate, 'trash'));
     const region = handleRegion || hitRegion(point);
@@ -178,8 +178,8 @@ ui.canvas.addEventListener('pointerdown', (event) => {
 });
 ui.canvas.addEventListener('pointermove', (event) => {
   if (!drag) return;
+  if (drag.mode === 'crop') { const item = selected(), crop = item.crop; crop.x = Math.max(0, Math.min(item.image.width - crop.width, drag.orig.x - (event.clientX - drag.start.x) * drag.scaleX)); crop.y = Math.max(0, Math.min(item.image.height - crop.height, drag.orig.y - (event.clientY - drag.start.y) * drag.scaleY)); render(); return; }
   const point = canvasPoint(event), dx = point.x - drag.start.x, dy = point.y - drag.start.y;
-  if (drag.mode === 'crop') { const item = selected(), crop = item.crop; crop.x = Math.max(0, Math.min(item.image.width - crop.width, drag.orig.x - dx)); crop.y = Math.max(0, Math.min(item.image.height - crop.height, drag.orig.y - dy)); render(); return; }
   const region = selected()?.regions.find((r) => r.id === drag.id); if (!region) return;
   if (drag.mode === 'rotate') { const cx = region.x + region.width / 2, cy = region.y + region.height / 2; region.angle = drag.orig.angle + (Math.atan2(point.y - cy, point.x - cx) - Math.atan2(drag.start.y - cy, drag.start.x - cx)) * 180 / Math.PI; }
   else if (drag.mode === 'resize') {
@@ -215,7 +215,7 @@ function changeActiveCrop(zoom) { const item = selected(); if (!item) return; co
 ui.cropRatio.addEventListener('change', () => changeActiveCrop(Number(ui.cropZoom.value)));
 ui.cropZoom.addEventListener('input', () => changeActiveCrop(Number(ui.cropZoom.value)));
 $('#crop-position').addEventListener('click', (event) => { cropMode = !cropMode; event.currentTarget.setAttribute('aria-pressed', String(cropMode)); event.currentTarget.classList.toggle('selected', cropMode); ui.wrap.classList.toggle('crop-active', cropMode); });
-$('#apply-crop-all').addEventListener('click', () => { for (const item of items) item.crop = cropFor(item.image, ui.cropRatio.value); ui.cropZoom.value = '1'; render(); updateNote(selected()); toast('Rasio crop diterapkan ke semua foto.'); });
+$('#apply-crop-all').addEventListener('click', () => { const source = selected(), centerX = (source.crop.x + source.crop.width / 2) / source.image.width, centerY = (source.crop.y + source.crop.height / 2) / source.image.height, ratio = ui.cropRatio.value, zoom = Number(ui.cropZoom.value); for (const item of items) item.crop = cropFor(item.image, ratio, zoom, centerX * item.image.width, centerY * item.image.height); render(); updateNote(selected()); toast('Bingkai diterapkan ke semua foto.'); });
 $('#remove-image').addEventListener('click', () => { const item = selected(); if (!item) return; item.image.close?.(); URL.revokeObjectURL(item.thumbUrl); items = items.filter((entry) => entry.id !== item.id); activeId = items[0]?.id || null; renderList(); if (activeId) select(activeId); });
 ui.strength.addEventListener('input', () => { ui.strengthLabel.textContent = ui.strength.value; render(); });
 ui.style.addEventListener('change', render);
