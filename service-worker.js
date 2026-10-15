@@ -1,5 +1,5 @@
 const CACHE_PREFIX = 'autotrof-blur-face-';
-const CACHE_NAME = `${CACHE_PREFIX}v1`;
+const CACHE_NAME = `${CACHE_PREFIX}v2`;
 const ROOT = new URL('./', self.location);
 const ASSETS = [
   './', './index.html', './style.css', './app.js', './manifest.webmanifest',

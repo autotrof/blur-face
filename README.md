@@ -17,3 +17,5 @@ python3 -m http.server 8000
 Open `http://localhost:8000`. The detector model is fetched from a pinned upstream commit and SHA-256 checked before it is embedded in the detector module. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 The service worker caches the app shell, icons, and both WASM modules for offline use. Its relative URLs support GitHub Pages project subpaths. The Pages workflow builds both modules and includes all installable PWA files in the deployment artifact.
+
+Typography loads Nunito from Google Fonts when online and falls back immediately to built-in system fonts when offline. The font stylesheet is non-blocking and the app editor remains usable without it. Nunito is licensed under the SIL Open Font License 1.1; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

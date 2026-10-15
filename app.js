@@ -2,7 +2,7 @@ import initDetect, { detect_faces } from './public/wasm/face-detect/wajah_detect
 import initBlur, { blur_rgba } from './public/wasm/blur/wajah_blur.js';
 
 const $ = (s) => document.querySelector(s);
-const ui = { input: $('#file-input'), list: $('#image-list'), empty: $('#empty-state'), editor: $('#editor'), name: $('#active-name'), size: $('#active-size'), canvas: $('#photo-canvas'), overlay: $('#overlay-canvas'), wrap: $('#canvas-wrap'), faceNote: $('#face-note'), dim: $('#dimension-note'), strength: $('#strength'), strengthLabel: $('#strength-label'), style: $('#blur-style'), downloadOne: $('#download-one'), downloadAll: $('#download-all'), toast: $('#toast'), addArea: $('#add-area'), batch: $('#batch-loading'), batchText: $('#batch-loading-text'), drop: $('#drop-indicator'), cropRatio: $('#crop-ratio'), cropZoom: $('#crop-zoom') };
+const ui = { input: $('#file-input'), list: $('#image-list'), empty: $('#empty-state'), editor: $('#editor'), name: $('#active-name'), size: $('#active-size'), canvas: $('#photo-canvas'), overlay: $('#overlay-canvas'), wrap: $('#canvas-wrap'), faceNote: $('#face-note'), dim: $('#dimension-note'), strength: $('#strength'), strengthLabel: $('#strength-label'), downloadOne: $('#download-one'), downloadAll: $('#download-all'), toast: $('#toast'), addArea: $('#add-area'), batch: $('#batch-loading'), batchText: $('#batch-loading-text'), drop: $('#drop-indicator'), cropRatio: $('#crop-ratio'), cropZoom: $('#crop-zoom'), background: $('#background-setting') };
 const ctx = ui.canvas.getContext('2d', { willReadFrequently: true });
 const overlayCtx = ui.overlay.getContext('2d');
 let items = [], activeId = null, drag = null, cropMode = false, wasmReady = false, toastTimer, previewToken = 0;
@@ -30,14 +30,20 @@ async function addFiles(rawFiles) {
   await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
   const added = [];
   for (const file of files) {
-    try { const image = await createImageBitmap(file); const item = { id: id(), file, image, thumbUrl: URL.createObjectURL(file), regions: [], status: 'ready', error: '', crop: { x: 0, y: 0, width: image.width, height: image.height } }; items.push(item); added.push(item); }
+    try { const image = await createImageBitmap(file); const item = { id: id(), file, image, thumbUrl: URL.createObjectURL(file), regions: [], status: 'ready', error: '', crop: frameFor(image, 'original', 'crop') }; items.push(item); added.push(item); }
     catch { toast(`Foto “${file.name}” tidak bisa dibuka.`); }
   }
   if (added.length) { activeId = added.at(-1).id; renderList(); showEditor(); select(activeId); }
-  if (added.length) { try { await readyWasm(); await Promise.all(added.map(detect)); } catch (error) { console.error(error); toast('Editor belum siap. Muat ulang halaman untuk mencoba lagi.'); } }
-  ui.batch.hidden = true;
+  if (added.length) {
+    ui.batchText.textContent = `Menyiapkan ${added.length} foto…`;
+    try { await readyWasm(); await Promise.all(added.map(detect)); }
+    catch (error) { console.error(error); toast('Editor belum siap. Muat ulang halaman untuk mencoba lagi.'); }
+    finally { ui.batch.hidden = true; }
+  } else ui.batch.hidden = true;
 }
 const workspace = document.querySelector('.workspace');
+ui.list.addEventListener('scroll', () => document.querySelectorAll('.delete-popover').forEach((popover) => popover.remove()), { passive: true });
+document.addEventListener('click', (event) => { if (!event.target.closest?.('.delete-popover,.row-remove')) document.querySelectorAll('.delete-popover').forEach((popover) => popover.remove()); });
 ['dragenter','dragover'].forEach((type) => workspace.addEventListener(type, (event) => { event.preventDefault(); if ([...event.dataTransfer.types].includes('Files')) ui.drop.classList.add('visible'); }));
 ['dragleave','drop'].forEach((type) => workspace.addEventListener(type, (event) => { event.preventDefault(); if (type === 'drop') { ui.drop.classList.remove('visible'); addFiles([...event.dataTransfer.files]); } else if (!workspace.contains(event.relatedTarget)) ui.drop.classList.remove('visible'); }));
 document.addEventListener('dragover', (event) => { if ([...event.dataTransfer.types].includes('Files')) event.preventDefault(); });
@@ -69,20 +75,48 @@ function showEditor() { ui.empty.hidden = true; ui.editor.hidden = false; }
 function renderList() {
   ui.list.replaceChildren();
   for (const item of items) {
+    const row = document.createElement('div'); row.className = 'image-item-row';
     const button = document.createElement('button'); button.className = `image-item ${item.id === activeId ? 'active' : ''}`; button.type = 'button'; button.setAttribute('aria-label', `Pilih ${item.file.name}`);
     const thumb = document.createElement('img'); thumb.className = 'image-thumb'; thumb.src = item.thumbUrl; thumb.alt = '';
     const info = document.createElement('span'); info.className = 'image-info';
     const name = document.createElement('span'); name.className = 'image-name'; name.textContent = item.file.name;
     const meta = document.createElement('span'); meta.className = 'image-meta'; meta.textContent = niceSize(item.file.size);
-    info.append(name, meta); button.append(thumb, info); button.addEventListener('click', () => select(item.id)); ui.list.append(button);
+    info.append(name, meta); button.append(thumb, info); button.addEventListener('click', () => select(item.id));
+    const removeWrap = document.createElement('div'); removeWrap.className = 'row-remove-wrap';
+    const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'row-remove'; remove.setAttribute('aria-label', `Hapus ${item.file.name}`); remove.setAttribute('aria-haspopup', 'true'); remove.title = 'Hapus foto'; remove.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6m4-6v6M5 7l1 14h12l1-14M9 7V4h6v3"/></svg>';
+    remove.addEventListener('click', (event) => { event.stopPropagation(); openDeletePopover(item.id, removeWrap); });
+    removeWrap.append(remove); row.append(button, removeWrap); ui.list.append(row);
   }
   ui.downloadAll.disabled = items.length === 0;
   if (!items.length) { ui.editor.hidden = true; ui.empty.hidden = false; }
 }
+function openDeletePopover(itemId, anchor) {
+  document.querySelectorAll('.delete-popover').forEach((popover) => popover.remove());
+  const popover = document.createElement('div'); popover.className = 'delete-popover'; popover.setAttribute('role', 'group'); popover.setAttribute('aria-label', 'Konfirmasi hapus foto');
+  const question = document.createElement('span'); question.textContent = 'Hapus foto ini?';
+  const yes = document.createElement('button'); yes.type = 'button'; yes.className = 'delete-confirm'; yes.textContent = 'Sure';
+  const no = document.createElement('button'); no.type = 'button'; no.className = 'delete-cancel'; no.textContent = 'Cancel';
+  yes.addEventListener('click', (event) => { event.stopPropagation(); popover.remove(); removeItem(itemId); });
+  no.addEventListener('click', (event) => { event.stopPropagation(); popover.remove(); });
+  popover.append(question, yes, no); document.body.append(popover);
+  const buttonBox = anchor.getBoundingClientRect(), popoverBox = popover.getBoundingClientRect();
+  const top = buttonBox.bottom + popoverBox.height + 8 <= innerHeight ? buttonBox.top : Math.max(8, buttonBox.top - popoverBox.height - 8);
+  const left = Math.max(8, Math.min(innerWidth - popoverBox.width - 8, buttonBox.right - popoverBox.width));
+  popover.style.left = `${left}px`; popover.style.top = `${top}px`;
+}
+function removeItem(itemId) {
+  const index = items.findIndex((entry) => entry.id === itemId); if (index < 0) return;
+  const wasActive = activeId === itemId, [item] = items.splice(index, 1);
+  item.image.close?.(); URL.revokeObjectURL(item.thumbUrl);
+  if (wasActive) activeId = items[Math.min(index, items.length - 1)]?.id || null;
+  renderList();
+  if (activeId) select(activeId);
+}
 function select(which) {
   activeId = which; cropMode = false; $('#crop-position').setAttribute('aria-pressed', 'false'); $('#crop-position').classList.remove('selected'); ui.wrap.classList.remove('crop-active'); renderList(); showEditor();
   const item = selected(); ui.name.textContent = item.file.name; ui.size.textContent = niceSize(item.file.size); ui.cropRatio.value = item.crop.ratioKey || 'original';
-  ui.cropZoom.value = String(item.crop.zoom || 1); updateNote(item); render();
+  ui.cropZoom.value = String(item.crop.zoom || 1); document.querySelector(`input[name="frame-mode"][value="${item.crop.mode || 'crop'}"]`).checked = true;
+  ui.background.querySelector(`input[value="${item.crop.background || 'white'}"]`).checked = true; syncFrameControls(item); updateNote(item); render();
 }
 function updateNote(item) {
   if (!item) return;
@@ -96,14 +130,16 @@ function render() {
   const token = ++previewToken;
   requestAnimationFrame(() => {
     if (token !== previewToken || item !== selected()) return;
-    const crop = item.crop;
+    const crop = item.crop, transform = frameTransform(item.image, crop);
     ui.canvas.width = Math.max(1, Math.round(crop.width)); ui.canvas.height = Math.max(1, Math.round(crop.height));
     ui.overlay.width = ui.canvas.width; ui.overlay.height = ui.canvas.height;
-    ctx.clearRect(0, 0, ui.canvas.width, ui.canvas.height); ctx.drawImage(item.image, crop.x, crop.y, crop.width, crop.height, 0, 0, ui.canvas.width, ui.canvas.height);
+    ctx.clearRect(0, 0, ui.canvas.width, ui.canvas.height);
+    if (crop.mode === 'expand') { ctx.fillStyle = crop.background === 'black' ? '#000' : '#fff'; ctx.fillRect(0, 0, crop.width, crop.height); ctx.drawImage(item.image, transform.offsetX, transform.offsetY, item.image.width * transform.scale, item.image.height * transform.scale); }
+    else ctx.drawImage(item.image, crop.x, crop.y, crop.width, crop.height, 0, 0, ui.canvas.width, ui.canvas.height);
     const enabled = item.regions.filter((region) => region.enabled);
     if (enabled.length) {
       const pixels = ctx.getImageData(0, 0, ui.canvas.width, ui.canvas.height);
-      const output = blur_rgba(new Uint8Array(pixels.data), ui.canvas.width, ui.canvas.height, enabled.map((region) => ({ ...region, x: region.x - crop.x, y: region.y - crop.y })), Number(ui.strength.value), ui.style.value);
+      const output = blur_rgba(new Uint8Array(pixels.data), ui.canvas.width, ui.canvas.height, enabled.map((region) => ({ ...region, x: region.x * transform.scale + transform.offsetX, y: region.y * transform.scale + transform.offsetY, width: region.width * transform.scale, height: region.height * transform.scale })), Number(ui.strength.value), selectedStyle());
       pixels.data.set(output); ctx.putImageData(pixels, 0, 0);
     }
     drawRegions(item);
@@ -120,24 +156,26 @@ function drawRegions(item) {
   const line = 2 * displayScale;
   const radius = 6 * displayScale;
   for (const region of item.regions) {
-    const rx = region.x - item.crop.x, ry = region.y - item.crop.y;
-    overlayCtx.save(); overlayCtx.translate(rx + region.width / 2, ry + region.height / 2); overlayCtx.rotate(region.angle * Math.PI / 180);
+    const transform = frameTransform(item.image, item.crop), rw = region.width * transform.scale, rh = region.height * transform.scale;
+    const rx = region.x * transform.scale + transform.offsetX, ry = region.y * transform.scale + transform.offsetY;
+    overlayCtx.save(); overlayCtx.translate(rx + rw / 2, ry + rh / 2); overlayCtx.rotate(region.angle * Math.PI / 180);
     overlayCtx.globalAlpha = region.enabled ? 1 : .48; overlayCtx.lineWidth = line; overlayCtx.setLineDash(region.enabled ? [] : [line * 2, line * 1.5]);
     overlayCtx.strokeStyle = region.kind === 'face' ? '#1672e8' : '#e28c35'; overlayCtx.fillStyle = region.kind === 'face' ? '#ffffff16' : '#ffffff22';
-    overlayCtx.beginPath(); if (region.shape === 'oval') overlayCtx.ellipse(0, 0, region.width / 2, region.height / 2, 0, 0, Math.PI * 2); else overlayCtx.rect(-region.width / 2, -region.height / 2, region.width, region.height); overlayCtx.fill(); overlayCtx.stroke();
+    overlayCtx.beginPath(); if (region.shape === 'oval') overlayCtx.ellipse(0, 0, rw / 2, rh / 2, 0, 0, Math.PI * 2); else overlayCtx.rect(-rw / 2, -rh / 2, rw, rh); overlayCtx.fill(); overlayCtx.stroke();
     if (region.id === item.selected || region.id === drag?.id) {
       overlayCtx.setLineDash([]); overlayCtx.fillStyle = '#fff'; overlayCtx.strokeStyle = '#1267cf'; overlayCtx.lineWidth = Math.max(2 * displayScale, line * .7);
-      for (const [x, y] of [[-region.width / 2, -region.height / 2], [region.width / 2, -region.height / 2], [-region.width / 2, region.height / 2], [region.width / 2, region.height / 2]]) { overlayCtx.beginPath(); overlayCtx.arc(x, y, radius, 0, Math.PI * 2); overlayCtx.fill(); overlayCtx.stroke(); }
-      overlayCtx.beginPath(); overlayCtx.moveTo(0, -region.height / 2); overlayCtx.lineTo(0, -region.height / 2 - radius * 2.5); overlayCtx.stroke();
-      overlayCtx.beginPath(); overlayCtx.arc(0, -region.height / 2 - radius * 2.5, radius * 1.35, 0, Math.PI * 2); overlayCtx.fill(); overlayCtx.stroke(); overlayCtx.strokeStyle = '#1267cf'; overlayCtx.lineWidth = Math.max(1.5 * displayScale, 1); overlayCtx.beginPath(); overlayCtx.arc(0, -region.height / 2 - radius * 2.5, radius * .62, Math.PI * 1.1, Math.PI * 2.8); overlayCtx.stroke();
-      const tx = region.width / 2 + radius * 2.3, ty = -region.height / 2;
+      for (const [x, y] of [[-rw / 2, -rh / 2], [rw / 2, -rh / 2], [-rw / 2, rh / 2], [rw / 2, rh / 2]]) { overlayCtx.beginPath(); overlayCtx.arc(x, y, radius, 0, Math.PI * 2); overlayCtx.fill(); overlayCtx.stroke(); }
+      overlayCtx.beginPath(); overlayCtx.moveTo(0, -rh / 2); overlayCtx.lineTo(0, -rh / 2 - radius * 2.5); overlayCtx.stroke();
+      overlayCtx.beginPath(); overlayCtx.arc(0, -rh / 2 - radius * 2.5, radius * 1.35, 0, Math.PI * 2); overlayCtx.fill(); overlayCtx.stroke(); overlayCtx.strokeStyle = '#1267cf'; overlayCtx.lineWidth = Math.max(1.5 * displayScale, 1); overlayCtx.beginPath(); overlayCtx.arc(0, -rh / 2 - radius * 2.5, radius * .62, Math.PI * 1.1, Math.PI * 2.8); overlayCtx.stroke();
+      const tx = rw / 2 + radius * 2.3, ty = -rh / 2;
       overlayCtx.fillStyle = '#d8444d'; overlayCtx.strokeStyle = '#fff'; overlayCtx.beginPath(); overlayCtx.arc(tx, ty, radius * 1.5, 0, Math.PI * 2); overlayCtx.fill(); overlayCtx.stroke();
       overlayCtx.strokeStyle = '#fff'; overlayCtx.lineWidth = Math.max(1.5 * displayScale, 1); overlayCtx.beginPath(); overlayCtx.moveTo(tx - radius * .5, ty - radius * .45); overlayCtx.lineTo(tx + radius * .5, ty - radius * .45); overlayCtx.moveTo(tx - radius * .35, ty - radius * .2); overlayCtx.lineTo(tx - radius * .25, ty + radius * .48); overlayCtx.lineTo(tx + radius * .25, ty + radius * .48); overlayCtx.lineTo(tx + radius * .35, ty - radius * .2); overlayCtx.moveTo(tx - radius * .25, ty - radius * .6); overlayCtx.lineTo(tx + radius * .25, ty - radius * .6); overlayCtx.stroke();
     }
     overlayCtx.restore();
   }
 }
-function canvasPoint(event) { const box = ui.canvas.getBoundingClientRect(), crop = selected().crop; return { x: crop.x + (event.clientX - box.left) * ui.canvas.width / box.width, y: crop.y + (event.clientY - box.top) * ui.canvas.height / box.height }; }
+function frameTransform(image, frame) { return frame.mode === 'expand' ? { scale: frame.zoom, offsetX: frame.width / 2 - frame.centerX * frame.zoom, offsetY: frame.height / 2 - frame.centerY * frame.zoom } : { scale: 1, offsetX: -frame.x, offsetY: -frame.y }; }
+function canvasPoint(event) { const box = ui.canvas.getBoundingClientRect(), item = selected(), transform = frameTransform(item.image, item.crop); const x = (event.clientX - box.left) * ui.canvas.width / box.width, y = (event.clientY - box.top) * ui.canvas.height / box.height; return { x: (x - transform.offsetX) / transform.scale, y: (y - transform.offsetY) / transform.scale }; }
 function localPoint(point, region) { const dx = point.x - region.x - region.width / 2, dy = point.y - region.y - region.height / 2, angle = -region.angle * Math.PI / 180; return { x: dx * Math.cos(angle) - dy * Math.sin(angle), y: dx * Math.sin(angle) + dy * Math.cos(angle) }; }
 function hitRegion(point) {
   const item = selected();
@@ -149,8 +187,8 @@ function hitRegion(point) {
   return null;
 }
 function resizeCorner(point, region) {
-  const local = localPoint(point, region), box = ui.canvas.getBoundingClientRect();
-  const scaleX = box.width ? box.width / ui.canvas.width : 1, scaleY = box.height ? box.height / ui.canvas.height : 1;
+  const local = localPoint(point, region), box = ui.canvas.getBoundingClientRect(), transform = frameTransform(selected().image, selected().crop);
+  const scaleX = box.width ? box.width * transform.scale / ui.canvas.width : 1, scaleY = box.height ? box.height * transform.scale / ui.canvas.height : 1;
   const threshold = 12;
   const corners = [[-region.width / 2, -region.height / 2], [region.width / 2, -region.height / 2], [-region.width / 2, region.height / 2], [region.width / 2, region.height / 2]];
   let best = null, distance = threshold;
@@ -158,7 +196,7 @@ function resizeCorner(point, region) {
   return best;
 }
 function handleHit(point, region, kind) {
-  const box = ui.canvas.getBoundingClientRect(), scale = ui.canvas.width / (box.width || 1), local = localPoint(point, region), r = 11 * scale;
+  const box = ui.canvas.getBoundingClientRect(), transform = frameTransform(selected().image, selected().crop), scale = ui.canvas.width / ((box.width || 1) * transform.scale), local = localPoint(point, region), r = 11 * scale;
   if (kind === 'rotate') return Math.hypot(local.x, local.y + region.height / 2 + 15 * scale) <= r;
   return Math.hypot(local.x - region.width / 2 - 14 * scale, local.y + region.height / 2) <= r;
 }
@@ -178,7 +216,7 @@ ui.canvas.addEventListener('pointerdown', (event) => {
 });
 ui.canvas.addEventListener('pointermove', (event) => {
   if (!drag) return;
-  if (drag.mode === 'crop') { const item = selected(), crop = item.crop; crop.x = Math.max(0, Math.min(item.image.width - crop.width, drag.orig.x - (event.clientX - drag.start.x) * drag.scaleX)); crop.y = Math.max(0, Math.min(item.image.height - crop.height, drag.orig.y - (event.clientY - drag.start.y) * drag.scaleY)); render(); return; }
+  if (drag.mode === 'crop') { const item = selected(), crop = item.crop, dx = (event.clientX - drag.start.x) * drag.scaleX, dy = (event.clientY - drag.start.y) * drag.scaleY; if (crop.mode === 'expand') { crop.centerX = drag.orig.centerX - dx / crop.zoom; crop.centerY = drag.orig.centerY - dy / crop.zoom; } else { crop.x = Math.max(0, Math.min(item.image.width - crop.width, drag.orig.x - dx)); crop.y = Math.max(0, Math.min(item.image.height - crop.height, drag.orig.y - dy)); } render(); return; }
   const point = canvasPoint(event), dx = point.x - drag.start.x, dy = point.y - drag.start.y;
   const region = selected()?.regions.find((r) => r.id === drag.id); if (!region) return;
   if (drag.mode === 'rotate') { const cx = region.x + region.width / 2, cy = region.y + region.height / 2; region.angle = drag.orig.angle + (Math.atan2(point.y - cy, point.x - cx) - Math.atan2(drag.start.y - cy, drag.start.x - cx)) * 180 / Math.PI; }
@@ -202,29 +240,43 @@ document.querySelectorAll('.shape-choice').forEach((button) => button.addEventLi
   for (const item of items) for (const region of item.regions) region.shape = selectedShape;
   render();
 }));
-ui.addArea.addEventListener('click', () => { const item = selected(); if (!item) return; const crop = item.crop, width = Math.min(crop.width, Math.max(72, crop.width * .22)), height = Math.min(crop.height, Math.max(64, crop.height * .22)); const region = { id: id(), kind: 'manual', shape: selectedShape, x: crop.x + (crop.width - width) / 2, y: crop.y + (crop.height - height) / 2, width, height, angle: 0, enabled: true }; item.regions.push(region); item.selected = region.id; render(); });
-function cropFor(image, ratioKey, zoom = 1, centerX = image.width / 2, centerY = image.height / 2) {
+ui.addArea.addEventListener('click', () => { const item = selected(); if (!item) return; const crop = item.crop, width = Math.min(item.image.width, Math.max(72, Math.min(item.image.width, crop.width / (crop.zoom || 1)) * .22)), height = Math.min(item.image.height, Math.max(64, Math.min(item.image.height, crop.height / (crop.zoom || 1)) * .22)), centerX = crop.mode === 'expand' ? crop.centerX : crop.x + crop.width / 2, centerY = crop.mode === 'expand' ? crop.centerY : crop.y + crop.height / 2; const region = { id: id(), kind: 'manual', shape: selectedShape, x: centerX - width / 2, y: centerY - height / 2, width, height, angle: 0, enabled: true }; item.regions.push(region); item.selected = region.id; render(); });
+function ratioValue(image, ratioKey) {
   let ratio = image.width / image.height;
   if (ratioKey !== 'original') { const [w,h] = ratioKey.split(':').map(Number); ratio = w / h; }
+  return ratio;
+}
+function frameFor(image, ratioKey, mode = 'crop', zoom = 1, centerX = image.width / 2, centerY = image.height / 2, background = 'white') {
+  const ratio = ratioValue(image, ratioKey);
+  if (mode === 'expand') {
+    const width = image.width / image.height > ratio ? image.width : image.height * ratio;
+    const height = width / ratio;
+    return { mode, ratioKey, zoom, width, height, x: 0, y: 0, centerX, centerY, background };
+  }
   let width = image.width, height = image.height;
   if (width / height > ratio) width = height * ratio; else height = width / ratio;
   width = Math.max(1, width / zoom); height = Math.max(1, height / zoom);
-  return { x: Math.max(0, Math.min(image.width - width, centerX - width / 2)), y: Math.max(0, Math.min(image.height - height, centerY - height / 2)), width, height, zoom, ratioKey };
+  return { mode, ratioKey, zoom, x: Math.max(0, Math.min(image.width - width, centerX - width / 2)), y: Math.max(0, Math.min(image.height - height, centerY - height / 2)), width, height, background };
 }
-function changeActiveCrop(zoom) { const item = selected(); if (!item) return; const c = item.crop; item.crop = cropFor(item.image, ui.cropRatio.value, zoom, c.x + c.width / 2, c.y + c.height / 2); render(); updateNote(item); }
-ui.cropRatio.addEventListener('change', () => changeActiveCrop(Number(ui.cropZoom.value)));
-ui.cropZoom.addEventListener('input', () => changeActiveCrop(Number(ui.cropZoom.value)));
+function selectedFrameMode() { return document.querySelector('input[name="frame-mode"]:checked').value; }
+function selectedStyle() { return document.querySelector('input[name="blur-style"]:checked').value; }
+function syncFrameControls(item) { ui.background.hidden = item.crop.mode !== 'expand'; }
+function changeActiveFrame(zoom = Number(ui.cropZoom.value), mode = selectedFrameMode(), ratio = ui.cropRatio.value) { const item = selected(); if (!item) return; const c = item.crop, centerX = c.mode === 'expand' ? c.centerX : c.x + c.width / 2, centerY = c.mode === 'expand' ? c.centerY : c.y + c.height / 2; item.crop = frameFor(item.image, ratio, mode, zoom, centerX, centerY, ui.background.querySelector('input:checked').value); syncFrameControls(item); render(); updateNote(item); }
+ui.cropRatio.addEventListener('change', () => changeActiveFrame());
+ui.cropZoom.addEventListener('input', () => changeActiveFrame(Number(ui.cropZoom.value)));
+document.querySelectorAll('input[name="frame-mode"]').forEach((input) => input.addEventListener('change', () => changeActiveFrame()));
+document.querySelectorAll('input[name="expand-background"]').forEach((input) => input.addEventListener('change', () => changeActiveFrame()));
 $('#crop-position').addEventListener('click', (event) => { cropMode = !cropMode; event.currentTarget.setAttribute('aria-pressed', String(cropMode)); event.currentTarget.classList.toggle('selected', cropMode); ui.wrap.classList.toggle('crop-active', cropMode); });
-$('#apply-crop-all').addEventListener('click', () => { const source = selected(), centerX = (source.crop.x + source.crop.width / 2) / source.image.width, centerY = (source.crop.y + source.crop.height / 2) / source.image.height, ratio = ui.cropRatio.value, zoom = Number(ui.cropZoom.value); for (const item of items) item.crop = cropFor(item.image, ratio, zoom, centerX * item.image.width, centerY * item.image.height); render(); updateNote(selected()); toast('Bingkai diterapkan ke semua foto.'); });
+$('#apply-crop-all').addEventListener('click', () => { const source = selected(), frame = source.crop, centerX = (frame.mode === 'expand' ? frame.centerX : frame.x + frame.width / 2) / source.image.width, centerY = (frame.mode === 'expand' ? frame.centerY : frame.y + frame.height / 2) / source.image.height, ratio = ui.cropRatio.value, mode = selectedFrameMode(), zoom = Number(ui.cropZoom.value), background = ui.background.querySelector('input:checked').value; for (const item of items) item.crop = frameFor(item.image, ratio, mode, zoom, centerX * item.image.width, centerY * item.image.height, background); render(); updateNote(selected()); toast('Bingkai diterapkan ke semua foto.'); });
 $('#remove-image').addEventListener('click', () => { const item = selected(); if (!item) return; item.image.close?.(); URL.revokeObjectURL(item.thumbUrl); items = items.filter((entry) => entry.id !== item.id); activeId = items[0]?.id || null; renderList(); if (activeId) select(activeId); });
 ui.strength.addEventListener('input', () => { ui.strengthLabel.textContent = ui.strength.value; render(); });
-ui.style.addEventListener('change', render);
+document.querySelectorAll('input[name="blur-style"]').forEach((input) => input.addEventListener('change', render));
 async function download(item) {
   if (!item) return; await readyWasm();
-  const crop = item.crop, canvas = document.createElement('canvas'); canvas.width = Math.max(1, Math.round(crop.width)); canvas.height = Math.max(1, Math.round(crop.height));
-  const outCtx = canvas.getContext('2d', { willReadFrequently: true }); outCtx.drawImage(item.image, crop.x, crop.y, crop.width, crop.height, 0, 0, canvas.width, canvas.height);
+  const crop = item.crop, transform = frameTransform(item.image, crop), canvas = document.createElement('canvas'); canvas.width = Math.max(1, Math.round(crop.width)); canvas.height = Math.max(1, Math.round(crop.height));
+  const outCtx = canvas.getContext('2d', { willReadFrequently: true }); if (crop.mode === 'expand') { outCtx.fillStyle = crop.background === 'black' ? '#000' : '#fff'; outCtx.fillRect(0, 0, canvas.width, canvas.height); outCtx.drawImage(item.image, transform.offsetX, transform.offsetY, item.image.width * transform.scale, item.image.height * transform.scale); } else outCtx.drawImage(item.image, crop.x, crop.y, crop.width, crop.height, 0, 0, canvas.width, canvas.height);
   const pixels = outCtx.getImageData(0, 0, canvas.width, canvas.height);
-  const output = blur_rgba(new Uint8Array(pixels.data), canvas.width, canvas.height, item.regions.filter((region) => region.enabled).map((region) => ({ ...region, x: region.x - crop.x, y: region.y - crop.y })), Number(ui.strength.value), ui.style.value);
+  const output = blur_rgba(new Uint8Array(pixels.data), canvas.width, canvas.height, item.regions.filter((region) => region.enabled).map((region) => ({ ...region, x: region.x * transform.scale + transform.offsetX, y: region.y * transform.scale + transform.offsetY, width: region.width * transform.scale, height: region.height * transform.scale })), Number(ui.strength.value), selectedStyle());
   pixels.data.set(output); outCtx.putImageData(pixels, 0, 0);
   const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
   if (!blob) throw new Error('PNG export failed');

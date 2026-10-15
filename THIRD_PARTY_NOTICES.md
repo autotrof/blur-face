@@ -40,3 +40,7 @@ Permission is hereby granted, free of charge, to any person obtaining a copy of 
 The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+## Nunito font
+
+When online, the interface requests the Nunito stylesheet from Google Fonts. The app does not bundle font binaries and uses local system font fallbacks when the stylesheet is unavailable, including offline. Nunito is licensed under the SIL Open Font License 1.1. Copyright 2014 The Nunito Project Authors. Source: [Google Fonts Nunito metadata](https://github.com/google/fonts/tree/main/ofl/nunito).
